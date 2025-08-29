@@ -1,0 +1,10 @@
+asyncpg
+fastapi
+uvicorn
+dotenv
+langchain
+langchain_core
+langchain_mcp_adapters
+langgraph
+pydantic
+passlib[bcrypt]
