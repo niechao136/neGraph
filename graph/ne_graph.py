@@ -5,11 +5,12 @@ from langchain.chat_models import init_chat_model
 from langchain_core.messages import BaseMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient, StreamableHttpConnection
 from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph.message import add_messages
+from functools import partial
 from typing import Annotated
 from typing_extensions import TypedDict
 from .tool_node import BasicToolNode
-from .postgre_memory import PostgresSaver
 
 
 load_dotenv()
@@ -34,8 +35,8 @@ class State(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
 
 
-def chatbot(state: State):
-    message = asyncio.run(llm_with_tools.ainvoke(state["messages"]))
+async def chatbot(state: State):
+    message = await llm_with_tools.ainvoke(state["messages"])
     assert len(message.tool_calls) <= 1
     return {
         "messages": [message]
@@ -65,5 +66,31 @@ graph_builder.add_edge("tools", "chatbot")
 graph_builder.add_edge(START, "chatbot")
 
 
-postgres_saver = PostgresSaver(dsn="postgresql://root:158818@150.109.15.178:5432/neGraph")
+class MyPostgresSaver(PostgresSaver):
+    async def aget_tuple(self, config):
+        """异步版本的 get_tuple"""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.get_tuple, config)
+
+    async def aput(self, config, checkpoint, metadata, new_versions):
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.put, config, checkpoint, metadata, new_versions)
+
+    async def aput_writes(self, config, writes, task_id: str, task_path: str = ''):
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self.put_writes, config, writes, task_id, task_path)
+
+    async def adelete_thread(self, thread_id: str):
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self.delete_thread, thread_id)
+
+    async def alist(self, config, *, filter = None, before = None, limit = 20):
+        loop = asyncio.get_running_loop()
+        func = partial(self.list, config, filter=filter, before=before, limit=limit)
+        return await loop.run_in_executor(None, lambda: list(func()))
+
+
+cm = MyPostgresSaver.from_conn_string("postgresql://root:158818@150.109.15.178:5432/neGraph")
+postgres_saver = cm.__enter__()
+postgres_saver.setup()
 graph = graph_builder.compile(checkpointer=postgres_saver)

@@ -1,8 +1,10 @@
+import asyncio
 import asyncpg
 from datetime import datetime, timezone
 import json
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from types import SimpleNamespace
 
 
 class PostgresMemory:
@@ -88,9 +90,9 @@ class PostgresSaver(BaseCheckpointSaver):
         return self._pool
 
     # -----------------------------
-    # put：保存 checkpoint
+    # aput：保存 checkpoint
     # -----------------------------
-    async def put(self, config: dict, checkpoint: dict, metadata=None, **kwargs):
+    async def aput(self, config: dict, checkpoint: dict, metadata=None, **kwargs):
         """
         保存一条 checkpoint：
         - checkpoint["values"]["messages"] 包含 HumanMessage / AIMessage 列表
@@ -135,10 +137,15 @@ class PostgresSaver(BaseCheckpointSaver):
                         json.dumps(tc.get("input")), json.dumps(tc.get("output")),
                         datetime.now(timezone.utc), order)
 
+    def put(self, config: dict, checkpoint: dict, metadata=None, **kwargs):
+        return asyncio.get_event_loop().run_until_complete(
+            self.aput(config, checkpoint, metadata, **kwargs)
+        )
+
     # -----------------------------
-    # get：恢复 checkpoint
+    # aget：恢复 checkpoint
     # -----------------------------
-    async def get(self, config: dict, checkpoint_id: str | None = None):
+    async def aget(self, config: dict, checkpoint_id: str | None = None):
         """
         返回 LangGraph 可继续运行的 checkpoint
         """
@@ -198,13 +205,46 @@ class PostgresSaver(BaseCheckpointSaver):
             "config": config,
             "metadata": {"conversation_id": conversation_id},
             "values": {"messages": messages},
-            "pending_sends": None
+            "pending_sends": None,
+            "ts": str(datetime.now(timezone.utc)),  # 时间戳
+            "v": 4,  # 版本号
+            "channel_values": {},  # 每个 channel 的状态
+            "channel_versions": {},  # 每个 channel 的版本
+            "versions_seen": {}  # 版本 Map
         }
+
+    def get(self, config: dict, checkpoint_id: str | None = None):
+        return asyncio.get_event_loop().run_until_complete(
+            self.aget(config=config, checkpoint_id=checkpoint_id)
+        )
+
+    async def aget_tuple(self, config: dict):
+        """LangGraph 恢复 checkpoint 专用"""
+        checkpoint = await self.aget(config)
+        if checkpoint:
+            meta = {
+                "source": "input",
+                "step": 0,
+                "parents": {}
+            }
+            return SimpleNamespace(
+                checkpoint=checkpoint,
+                config=config,
+                parent_config={},
+                metadata=meta,
+                pending_writes=[]
+            )
+        return None
+
+    def get_tuple(self, config: dict):
+        return asyncio.get_event_loop().run_until_complete(
+            self.aget_tuple(config=config)
+        )
 
     # -----------------------------
     # list：列出历史 checkpoint 元信息
     # -----------------------------
-    async def list(self, config: dict, limit: int = 20, before: str | None = None, **kwargs):
+    async def alist(self, config: dict, limit: int = 20, before: str | None = None, **kwargs):
         """
         返回该用户的会话列表（只返回 metadata，不加载全部消息）
         :param config:
@@ -236,6 +276,11 @@ class PostgresSaver(BaseCheckpointSaver):
             for r in rows
         ]
 
+    def list(self, config: dict, limit: int = 20, before: str | None = None, **kwargs):
+        return asyncio.get_event_loop().run_until_complete(
+            self.alist(config=config, limit=limit, before=before, **kwargs)
+        )
+
     async def new_conversation(self, user_id: str, summary: str = None) -> str:
         """
         新建会话，并返回 conversation_id (UUID)
@@ -249,4 +294,66 @@ class PostgresSaver(BaseCheckpointSaver):
             """, user_id, summary)
             return str(row["id"])
 
+    async def conversation_list(self, user_id: str, limit: int = 10, before: str | None = None):
+        """
+        基于游标的增量获取会话（cursor-based pagination）
+        返回格式：
+        {
+            "limit": 20,
+            "has_more": false,
+            "data": [...]
+        }
+
+        参数:
+            user_id: 当前用户
+            limit: 本次请求最大条数
+            before: 上一页最后一条 created_at (ISO8601 字符串)，下一页传这个参数
+        """
+        pool = await self._get_conn()
+        async with pool.acquire() as conn:
+            if before:
+                # 转换成 timestamptz
+                rows = await conn.fetch(
+                    """
+                    SELECT id, summary, created_at
+                    FROM conversations
+                    WHERE user_id = $1
+                      AND created_at < $2
+                    ORDER BY created_at DESC
+                        LIMIT $3
+                    """,
+                    user_id,
+                    before,
+                    limit + 1,  # 多取一条用于判断 has_more
+                )
+            else:
+                rows = await conn.fetch(
+                    """
+                    SELECT id, summary, created_at
+                    FROM conversations
+                    WHERE user_id = $1
+                    ORDER BY created_at DESC
+                        LIMIT $2
+                    """,
+                    user_id,
+                    limit + 1,
+                )
+
+        has_more = len(rows) > limit
+        result_rows = rows[:limit]
+        return {
+            "limit": limit,
+            "has_more": has_more,
+            "data": [
+                {
+                    "conversation_id": str(r["id"]),
+                    "summary": r["summary"],
+                    "created_at": r["created_at"].isoformat(),
+                }
+                for r in result_rows
+            ],
+        }
+
+
+helper = PostgresSaver(dsn="postgresql://root:158818@150.109.15.178:5432/neGraph")
 
