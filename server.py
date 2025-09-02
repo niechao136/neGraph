@@ -2,8 +2,7 @@ import uvicorn
 from typing import List, Optional, Any
 
 from fastapi import FastAPI, Depends
-from langchain_core.messages import HumanMessage, AIMessage
-from langgraph.checkpoint.postgres import PostgresSaver
+from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
 from graph.ne_graph import graph, MyPostgresSaver
@@ -37,10 +36,10 @@ class MessageOut(BaseModel):
     tool_calls: Optional[list] = []
 
 class ChatSendResponse(BaseModel):
-    messages: List[MessageOut]
+    messages: List[BaseMessage]
 
 class ChatHistoryResponse(BaseModel):
-    messages: List[MessageOut]
+    messages: List[BaseMessage]
 
 class ChatListResponse(BaseModel):
     data: List[Any]
@@ -70,18 +69,8 @@ async def send_message(req: ChatSendRequest, current_user=Depends(get_current_us
     async for event in graph.astream(input={"messages": [("user", req.message)]}, config=config, stream_mode="values"):  # 简化写法
         for value in event.values():
             message = value[-1]
-            if message.type == "ai":
-                if message.content:
-                    print("Assistant:", message.content)
-                if hasattr(message, "tool_calls") and message.tool_calls:
-                    print("Assistant called tool(s):", message.tool_calls)
-            elif message.type == "tool":
-                print("Tool call result:", message.content)
-            out_messages.append(MessageOut(
-                content=message.content,
-                sender=message.type,
-                tool_calls=message.additional_kwargs.get("tool_calls", [])
-            ))
+            if message.type != "human":
+                out_messages.append(message)
     return {"messages": out_messages}
 
 # -----------------------------
@@ -97,11 +86,7 @@ async def chat_history(conversation_id: str, current_user=Depends(get_current_us
     }) or {"channel_values": {"messages": []}}
     out_messages = []
     for msg in state["channel_values"]["messages"]:
-        out_messages.append(MessageOut(
-            content=msg.content,
-            sender="ai" if isinstance(msg, AIMessage) else "user",
-            tool_calls=msg.additional_kwargs.get("tool_calls", [])
-        ))
+        out_messages.append(msg)
     return {"messages": out_messages}
 
 # -----------------------------
