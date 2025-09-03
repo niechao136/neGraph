@@ -1,0 +1,28 @@
+version: '3.9'
+
+networks:
+  ai_network:
+    driver: bridge
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    container_name: backend
+    ports:
+      - "10085:10085"
+    networks:
+      - ai_network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./web
+      dockerfile: frontend.Dockerfile
+    container_name: frontend
+    ports:
+      - "10085:80"
+    networks:
+      - ai_network
+    restart: unless-stopped
