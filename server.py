@@ -13,7 +13,7 @@ from auth import auth_router
 from auth.jwt_helper import get_current_user
 from util.type import to_dict
 
-app = FastAPI()
+app = FastAPI(root_path="/api")
 # 将路由注册到主应用
 app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
 
