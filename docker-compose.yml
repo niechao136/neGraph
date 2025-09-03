@@ -8,7 +8,6 @@ services:
   backend:
     build:
       context: .
-      dockerfile: backend.Dockerfile
       args:
         USE_CN_SOURCE: ${USE_CN_SOURCE:-true}  # 使用环境变量，如果没有设置则默认使用 true
     container_name: backend
@@ -21,7 +20,6 @@ services:
   frontend:
     build:
       context: ./web
-      dockerfile: frontend.Dockerfile
     container_name: frontend
     ports:
       - "10085:80"
