@@ -1,14 +1,17 @@
+import json
 import uvicorn
 from typing import List, Optional, Any
 
 from fastapi import FastAPI, Depends
+from fastapi.responses import StreamingResponse
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
 from graph.ne_graph import graph, MyPostgresSaver
-from graph.postgre_memory import helper
+from db.db_helper import helper
 from auth import auth_router
 from auth.jwt_helper import get_current_user
+from util.type import to_dict
 
 app = FastAPI()
 # 将路由注册到主应用
@@ -26,20 +29,22 @@ class ChatStartRequest(BaseModel):
 class ChatSendRequest(BaseModel):
     conversation_id: str
     message: str
+    stream: bool = True
 
 class ChatHistoryRequest(BaseModel):
     conversation_id: str
 
-class MessageOut(BaseModel):
-    content: str
-    sender: str
-    tool_calls: Optional[list] = []
-
 class ChatSendResponse(BaseModel):
     messages: List[BaseMessage]
 
+class ChatBlock(BaseModel):
+    user: BaseMessage
+    tool_calls: List[BaseMessage]
+    tool_results: List[BaseMessage]
+    assistant: BaseMessage
+
 class ChatHistoryResponse(BaseModel):
-    messages: List[BaseMessage]
+    messages: List[ChatBlock]
 
 class ChatListResponse(BaseModel):
     data: List[Any]
@@ -65,13 +70,28 @@ async def send_message(req: ChatSendRequest, current_user=Depends(get_current_us
             "user_id": current_user["user_id"]
         }
     }
-    out_messages = []
-    async for event in graph.astream(input={"messages": [("user", req.message)]}, config=config, stream_mode="values"):  # 简化写法
-        for value in event.values():
-            message = value[-1]
-            if message.type != "human":
-                out_messages.append(message)
-    return {"messages": out_messages}
+    if not req.stream:
+        out_messages = []
+        async for event in graph.astream(input={"messages": [("user", req.message)]}, config=config, stream_mode="values"):  # 简化写法
+            for value in event.values():
+                message = value[-1]
+                if message.type != "human":
+                    out_messages.append(message)
+        return {"messages": out_messages}
+
+    # 流式模式（StreamingResponse + chunked JSON）
+    async def event_generator():
+        async for _event in graph.astream(input={"messages": [("user", req.message)]},config=config,stream_mode="values"):
+            for _value in _event.values():
+                _message = _value[-1]
+                if getattr(_message, "type", None) != "human":
+                    payload = to_dict(_message)
+                    yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+        # SSE 结束标记
+        yield "data: {\"done\":true}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 # -----------------------------
 # 获取历史消息
@@ -84,10 +104,36 @@ async def chat_history(conversation_id: str, current_user=Depends(get_current_us
             "user_id": current_user["user_id"]
         }
     }) or {"channel_values": {"messages": []}}
-    out_messages = []
+    history: List[ChatBlock] = []
+    # 初始化一个空块
+    block: dict | None = None
+
     for msg in state["channel_values"]["messages"]:
-        out_messages.append(msg)
-    return {"messages": out_messages}
+        if msg.type == "human":
+            # 遇到用户消息，开始新对话块
+            if block:
+                # 上一个块结束，加入历史
+                history.append(ChatBlock(**block))
+            block = {
+                "user": msg,
+                "tool_calls": [],
+                "tool_results": [],
+                "assistant": None
+            }
+        elif msg.type == "ai":
+            # AI 消息
+            if msg.additional_kwargs.get("tool_calls"):
+                block["tool_calls"].append(msg)
+            else:
+                block["assistant"] = msg
+        elif msg.type == "tool":
+            block["tool_results"].append(msg)
+
+    # 最后一个块也加入
+    if block:
+        history.append(ChatBlock(**block))
+
+    return {"messages": history}
 
 # -----------------------------
 # 列出会话

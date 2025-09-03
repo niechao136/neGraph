@@ -1,11 +1,10 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from .db_helper import AuthHelper
+from db.db_helper import helper
 from .jwt_helper import create_access_token
 
 
 router = APIRouter()
-auth_helper = AuthHelper(dsn="postgresql://root:158818@150.109.15.178:5432/neGraph")
 
 
 # -----------------------------
@@ -32,7 +31,7 @@ class TokenResponse(BaseModel):
 # -----------------------------
 @router.post("/register", response_model=TokenResponse)
 async def register(user: UserRegister):
-    user_id = await auth_helper.register(username=user.username, password=user.password, email=user.email)
+    user_id = await helper.register(username=user.username, password=user.password, email=user.email)
     if user_id is None:
         return {
             "status": 0,
@@ -50,7 +49,7 @@ async def register(user: UserRegister):
 # -----------------------------
 @router.post("/login", response_model=TokenResponse)
 async def login(user: UserLogin):
-    user_id = await auth_helper.login(username=user.username, password=user.password)
+    user_id = await helper.login(username=user.username, password=user.password)
     if user_id is None:
         return {
             "status": 0,
