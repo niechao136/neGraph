@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
+from typing import Union
 from db.db_helper import helper
 from .jwt_helper import create_access_token
 
@@ -19,11 +20,17 @@ class UserLogin(BaseModel):
     username: str
     password: str
 
-class TokenResponse(BaseModel):
+# 成功返回模型
+class TokenSuccessResponse(BaseModel):
+    status: int = 1
     access_token: str
-    token_type: str = "bearer"
-    status: int
-    error_msg: str | None = None
+
+# 失败返回模型
+class TokenErrorResponse(BaseModel):
+    status: int = 0
+    error_msg: str
+
+TokenResponse = Union[TokenSuccessResponse, TokenErrorResponse]
 
 
 # -----------------------------
@@ -33,15 +40,9 @@ class TokenResponse(BaseModel):
 async def register(user: UserRegister):
     user_id = await helper.register(username=user.username, password=user.password, email=user.email)
     if user_id is None:
-        return {
-            "status": 0,
-            "error_msg": "Username already exists"
-        }
+        return TokenErrorResponse(status=0, error_msg="Username already exists")
     token = create_access_token({"user_id": str(user_id), "username": user.username})
-    return {
-        "status": 1,
-        "access_token": token
-    }
+    return TokenSuccessResponse(status=1, access_token=token)
 
 
 # -----------------------------
@@ -51,12 +52,6 @@ async def register(user: UserRegister):
 async def login(user: UserLogin):
     user_id = await helper.login(username=user.username, password=user.password)
     if user_id is None:
-        return {
-            "status": 0,
-            "error_msg": "Username or password is incorrect"
-        }
+        return TokenErrorResponse(status=0, error_msg="Username or password is incorrect")
     token = create_access_token({"user_id": str(user_id), "username": user.username})
-    return {
-        "status": 1,
-        "access_token": token
-    }
+    return TokenSuccessResponse(status=1, access_token=token)
