@@ -22,7 +22,7 @@ services:
       context: ./web
     container_name: frontend
     ports:
-      - "10085:80"
+      - "10086:80"
     networks:
       - ai_network
     restart: unless-stopped
