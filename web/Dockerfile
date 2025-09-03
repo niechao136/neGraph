@@ -4,7 +4,7 @@ FROM node:20-alpine AS build
 WORKDIR /app
 
 # 复制 package.json 和锁文件
-COPY package*.json .
+COPY package*.json ./
 
 # 安装依赖
 RUN npm install
