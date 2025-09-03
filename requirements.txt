@@ -3,6 +3,7 @@ bcrypt==3.2.2
 fastapi
 langchain
 langchain_core
+langchain-openai
 langchain_mcp_adapters
 langgraph
 langgraph_checkpoint_postgres
