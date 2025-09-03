@@ -4,13 +4,13 @@ FROM node:20-alpine AS build
 WORKDIR /app
 
 # 复制 package.json 和锁文件
-COPY web/package*.json ./
+COPY package*.json .
 
 # 安装依赖
 RUN npm install
 
 # 复制前端源代码（忽略 node_modules）
-COPY web/ ./
+COPY . .
 
 # 构建生产版本
 RUN npm run build
