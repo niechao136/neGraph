@@ -3,6 +3,7 @@ import uvicorn
 from typing import List, Optional, Any
 
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
@@ -16,6 +17,15 @@ from util.type import to_dict
 app = FastAPI(root_path="/api")
 # 将路由注册到主应用
 app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
+
+# 添加 CORS 中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许访问的域名列表，["*"] 表示允许所有
+    allow_credentials=True,  # 是否允许携带 cookie
+    allow_methods=["*"],      # 允许的方法，例如 ["GET", "POST"]
+    allow_headers=["*"],      # 允许的请求头
+)
 
 # Graph 对象
 saver: MyPostgresSaver = graph.checkpointer
