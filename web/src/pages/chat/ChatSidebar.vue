@@ -1,11 +1,11 @@
 <script lang="ts">
 import {Component, Prop, Vue} from 'vue-property-decorator'
+import { get } from '@/api'
+import { LoginStore } from '@/stores/login'
+import { getInitials } from '@/utils/string'
 
-type ChatItem = {
-  conversation_id?: string
-  summary?: string
-  created_at?: string
-}
+
+const loginStore = new LoginStore()
 
 @Component({})
 export default class ChatSidebar extends Vue {
@@ -13,17 +13,25 @@ export default class ChatSidebar extends Vue {
   private activeId: string
 
   @Prop({ type: Number, default: () => 20 })
-  private pageSize: number
+  private limit: number
 
   private collapsed = false
-  private hovering = false
-  private items: ChatItem[] = []
-  private cursor = ''
-  private has_more = false
+  private items: Chat.Info[] = []
+  private has_more = true
   private loading = false
+  private before: string | null = null
   private skeletonCount = 6
 
   private showUserMenu = false
+
+  protected get user() {
+    const username = loginStore.user?.username ?? ''
+    const avatar = getInitials(username)
+    return {
+      avatar,
+      username,
+    }
+  }
 
   /** 折叠/展开 */
   public toggleCollapse() {
@@ -33,6 +41,19 @@ export default class ChatSidebar extends Vue {
   private async loadMore() {
     if (this.loading || !this.has_more) return
     this.loading = true
+    const data = {
+      limit: this.limit,
+      before: this.before,
+    }
+    const res = await get({ url: 'chat/list', data })
+    const list: Chat.List = res?.data ?? {}
+    if (Array.isArray(list?.data)) {
+      this.has_more = !!list?.has_more
+      const data = list?.data ?? []
+      this.before = data[data.length - 1]?.created_at ?? null
+      this.items = this.items.concat(data)
+    }
+    this.loading = false
   }
 
   private onScroll(e: Event) {
@@ -58,6 +79,11 @@ export default class ChatSidebar extends Vue {
     if (!this.$el.querySelector('.sidebar-footer')?.contains(target)) {
       this.showUserMenu = false
     }
+  }
+
+  protected async created() {
+    this.items = []
+    await this.loadMore()
   }
 
   protected async mounted() {
@@ -139,9 +165,9 @@ export default class ChatSidebar extends Vue {
 
     <!-- Footer -->
     <div class="sidebar-footer" @click="toggleUserMenu">
-      <div class="user-avatar">NC</div>
+      <div class="user-avatar">{{ user.avatar }}</div>
       <div v-if="!collapsed" class="user-meta">
-        <div class="username">nie chao</div>
+        <div class="username">{{ user.username }}</div>
       </div>
       <transition name="fade">
         <div v-if="showUserMenu" class="user-menu">

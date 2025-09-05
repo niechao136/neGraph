@@ -16,3 +16,13 @@ export const post = <T = any, V = any>(option: PostOption<V>): Promise<AxiosResp
   }
   return request.post<T, AxiosResponse<T>, V>(query, data, conf)
 }
+
+export const get = <T = any, V = any>(option: PostOption<V>): Promise<AxiosResponse<T>> => {
+  const { url, data, config, base } = option
+  const query = (base ?? 'api/') + url
+  const conf: AxiosRequestConfig = {
+    ...(config ?? {}),
+    params: data,
+  }
+  return request.get<T, AxiosResponse<T>, V>(query, conf)
+}

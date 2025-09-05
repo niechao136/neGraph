@@ -1,5 +1,5 @@
 import { Store, Pinia } from 'pinia-class-component'
-import { post } from '@/api'
+import { post, get } from '@/api'
 import { COOKIE_KEY, CRYPTO_KEY } from '@/config'
 import { getCookie, rmCookie, setCookie } from '@/utils/cookie'
 import { aesDecrypt, aesEncrypt } from '@/utils/crypto'
@@ -8,6 +8,8 @@ import { aesDecrypt, aesEncrypt } from '@/utils/crypto'
 @Store
 export class LoginStore extends Pinia {
   _token = ''
+  user: User.Info = {}
+
   initToken() {
     let _token = ''
     const token = getCookie(COOKIE_KEY.TOKEN)
@@ -47,6 +49,11 @@ export class LoginStore extends Pinia {
       setCookie(COOKIE_KEY.TOKEN, aesEncrypt(this._token, CRYPTO_KEY.TOKEN), null)
     }
     return res?.data
+  }
+
+  async getUser() {
+    const res = await get({ url: 'user/info' })
+    this.user = res?.data ?? {}
   }
 
 }
