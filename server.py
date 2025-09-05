@@ -18,15 +18,6 @@ app = FastAPI(root_path="/api")
 # 将路由注册到主应用
 app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
 
-# 添加 CORS 中间件
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 允许访问的域名列表，["*"] 表示允许所有
-    allow_credentials=True,  # 是否允许携带 cookie
-    allow_methods=["*"],      # 允许的方法，例如 ["GET", "POST"]
-    allow_headers=["*"],      # 允许的请求头
-)
-
 # Graph 对象
 saver: MyPostgresSaver = graph.checkpointer
 
@@ -163,6 +154,16 @@ async def chat_list(current_user=Depends(get_current_user)):
         "user_id": current_user["user_id"],
         "username": current_user["username"],
     }
+
+
+# 添加 CORS 中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许访问的域名列表，["*"] 表示允许所有
+    allow_credentials=True,  # 是否允许携带 cookie
+    allow_methods=["*"],      # 允许的方法，例如 ["GET", "POST"]
+    allow_headers=["*"],      # 允许的请求头
+)
 
 
 if __name__ == "__main__":
