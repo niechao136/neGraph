@@ -61,6 +61,10 @@ class ChatListResponse(BaseModel):
     limit: int
     has_more: bool
 
+class UserInfoResponse(BaseModel):
+    user_id: str
+    username: str
+
 # -----------------------------
 # 创建会话
 # -----------------------------
@@ -151,6 +155,14 @@ async def chat_history(conversation_id: str, current_user=Depends(get_current_us
 @app.get("/chat/list", response_model=ChatListResponse)
 async def chat_list(limit = 10, before = None, current_user=Depends(get_current_user)):
     return await helper.conversation_list(user_id=current_user["user_id"], limit=limit, before=before)
+
+
+@app.get("/user/info", response_model=UserInfoResponse)
+async def chat_list(current_user=Depends(get_current_user)):
+    return {
+        "user_id": current_user["user_id"],
+        "username": current_user["username"],
+    }
 
 
 if __name__ == "__main__":
