@@ -17,4 +17,12 @@ declare namespace Chat {
     summary?: string
     created_at?: string
   }
+  type MessageType = "init" | "question" | "answer";
+  type Message = {
+    type?: MessageType;
+    timestamp?: string;
+    content?: string;
+    loading?: boolean;
+    finish?: boolean;
+  };
 }

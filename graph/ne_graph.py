@@ -23,7 +23,7 @@ tools = asyncio.run(client.get_tools())
 
 
 llm = init_chat_model(
-    model="qwen-plus-2025-07-28",
+    model="qwen-plus-2025-07-14",
     model_provider="openai",
     api_key=os.getenv("ALIYUN_API_KEY"),
     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
