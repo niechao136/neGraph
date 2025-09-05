@@ -144,7 +144,7 @@ async def chat_history(conversation_id: str, current_user=Depends(get_current_us
 # 列出会话
 # -----------------------------
 @app.get("/chat/list", response_model=ChatListResponse)
-async def chat_list(limit = 10, before = None, current_user=Depends(get_current_user)):
+async def chat_list(limit: int = 10, before: Optional[str] = None, current_user=Depends(get_current_user)):
     return await helper.conversation_list(user_id=current_user["user_id"], limit=limit, before=before)
 
 
